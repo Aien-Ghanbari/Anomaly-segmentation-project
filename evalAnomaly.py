@@ -1,0 +1,219 @@
+# Copyright (c) OpenMMLab. All rights reserved.
+import os
+import cv2
+import glob
+import torch
+import random
+from PIL import Image
+import numpy as np
+from erfnet import ERFNet
+import os.path as osp
+from argparse import ArgumentParser
+from ood_metrics import fpr_at_95_tpr, calc_metrics, plot_roc, plot_pr,plot_barcode
+from sklearn.metrics import roc_auc_score, roc_curve, auc, precision_recall_curve, average_precision_score
+from torchvision.transforms import Compose, Resize, ToTensor, Normalize
+
+seed = 42
+
+# general reproducibility
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+
+NUM_CHANNELS = 3
+NUM_CLASSES = 20
+# gpu training specific
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = True
+
+input_transform = Compose(
+    [
+        Resize((512, 1024), Image.BILINEAR),
+        ToTensor(),
+        # Normalize([.485, .456, .406], [.229, .224, .225]),
+    ]
+)
+
+target_transform = Compose(
+    [
+        Resize((512, 1024), Image.NEAREST),
+    ]
+)
+
+
+def main():
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--input",
+        default=[
+            r"C:\Users\Aein\Desktop\Polito\Semester 2\Fundamentals of Artificial Intelligence, Machine and Deep Learning\Project\Validation_Dataset\RoadAnomaly\images\*.jpg"
+        ],
+        nargs="+",
+        help="A list of space separated input images; "
+        "or a single glob pattern such as 'directory/*.jpg'",
+    )  
+    parser.add_argument('--loadDir',default=r"C:\Users\Aein\Desktop\Polito\Semester 2\Fundamentals of Artificial Intelligence, Machine and Deep Learning\Project\MaskArchitectureAnomaly_CourseProject-main\trained_models")
+    parser.add_argument('--loadWeights', default="erfnet_pretrained.pth")
+    parser.add_argument('--loadModel', default="erfnet.py")
+    parser.add_argument('--subset', default="val")  #can be val or train (must have labels)
+    parser.add_argument('--datadir', default=r"C:\Users\Aein\Desktop\Polito\Semester 2\Fundamentals of Artificial Intelligence, Machine and Deep Learning\Project\Validation_Dataset")
+    parser.add_argument('--num-workers', type=int, default=4)
+    parser.add_argument('--batch-size', type=int, default=1)
+    parser.add_argument('--cpu', action='store_true')
+    args = parser.parse_args()
+    anomaly_score_list = []
+    ood_gts_list = []
+
+    if not os.path.exists('results.txt'):
+        open('results.txt', 'w').close()
+    file = open('results.txt', 'a')
+
+    modelpath = osp.join(args.loadDir, args.loadModel)
+    weightspath = osp.join(args.loadDir, args.loadWeights)
+
+    print ("Loading model: " + modelpath)
+    print ("Loading weights: " + weightspath)
+
+    model = ERFNet(NUM_CLASSES)
+    device = torch.device("cuda" if (torch.cuda.is_available() and not args.cpu) else "cpu")
+
+    if device.type == "cuda":
+        model = torch.nn.DataParallel(model).to(device)
+    else:
+        model = model.to(device)
+
+    def load_my_state_dict(model, state_dict): 
+        own_state = model.state_dict()
+        for name, param in state_dict.items():
+            if name not in own_state:
+                if name.startswith("module."):
+                    own_state[name.split("module.")[-1]].copy_(param)
+                else:
+                    print(name, " not loaded")
+                    continue
+            else:
+                own_state[name].copy_(param)
+        return model
+
+    model = load_my_state_dict(model, torch.load(weightspath, map_location=device))
+    print ("Model and weights LOADED successfully")
+    model.eval()
+    
+    supported_exts = [".jpg", ".jpeg", ".png", ".webp"]
+    matched_paths = []
+    tried_patterns = []
+    for input_pattern in args.input:
+        expanded_pattern = os.path.expanduser(str(input_pattern))
+        direct_matches = glob.glob(expanded_pattern)
+        tried_patterns.append(expanded_pattern)
+
+        if direct_matches:
+            matched_paths.extend(direct_matches)
+            continue
+
+        # Fallback: if extension was wrong, try common image extensions automatically.
+        base_pattern, ext = osp.splitext(expanded_pattern)
+        if ext.lower() in supported_exts:
+            for candidate_ext in supported_exts:
+                candidate_pattern = base_pattern + candidate_ext
+                tried_patterns.append(candidate_pattern)
+                matched_paths.extend(glob.glob(candidate_pattern))
+
+    matched_paths = sorted(list(set(matched_paths)))
+
+    if len(matched_paths) == 0:
+        print("No input images matched the provided --input pattern(s).")
+        print("Tried patterns:")
+        for tried in sorted(list(set(tried_patterns))):
+            print(f"  - {tried}")
+        print("Tip: check file extension (*.jpg/*.png/*.webp) and absolute path.")
+        file.write("    No input images matched the provided --input pattern(s).\n")
+        file.close()
+        return
+
+    print(f"Matched {len(matched_paths)} input image(s).")
+
+    for path in matched_paths:
+            print(path)
+            images = input_transform((Image.open(path).convert('RGB'))).unsqueeze(0).float().to(device)
+            with torch.no_grad():
+                result = model(images)
+            #MSP
+            anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)
+            #Max-Logit
+            #anomaly_result = -np.max(result.squeeze(0).data.cpu().numpy(), axis=0)
+            #max-entropy
+            # 3. Max Entropy
+            #probs = torch.nn.functional.softmax(result.squeeze(0), dim=0)
+            #entropy = -torch.sum(probs * torch.log(probs + 1e-7), dim=0)
+            #anomaly_result = entropy.data.cpu().numpy()
+            pathGT = path.replace("images", "labels_masks")
+            if "RoadObsticle21" in pathGT:
+               pathGT = pathGT.replace("webp", "png")
+            if "fs_static" in pathGT:
+               pathGT = pathGT.replace("jpg", "png")
+            # Added a condition to prevent it from triggering on RoadAnomaly21
+            if "RoadAnomaly" in pathGT and "RoadAnomaly21" not in pathGT:
+               pathGT = pathGT.replace("jpg", "png")
+
+            mask = Image.open(pathGT)
+            mask = target_transform(mask)
+            ood_gts = np.array(mask)
+            print(f"Raw mask values: {np.unique(ood_gts)}")
+
+            if "RoadAnomaly" in pathGT and "RoadAnomaly21" not in pathGT:
+                ood_gts = np.where((ood_gts==2), 1, ood_gts)
+            #if "FS_LostFound_full" in pathGT:
+                #ood_gts = np.where((ood_gts==0), 255, ood_gts)
+                #ood_gts = np.where((ood_gts==1), 0, ood_gts)
+                #ood_gts = np.where((ood_gts>1)&(ood_gts<201), 1, ood_gts)
+
+            if "Streethazard" in pathGT:
+                ood_gts = np.where((ood_gts==14), 255, ood_gts)
+                ood_gts = np.where((ood_gts<20), 0, ood_gts)
+                ood_gts = np.where((ood_gts==255), 1, ood_gts)
+
+            if 1 not in np.unique(ood_gts):
+                continue
+            else:
+                 ood_gts_list.append(ood_gts)
+                 anomaly_score_list.append(anomaly_result)
+            del result, anomaly_result, ood_gts, mask
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+
+    if len(ood_gts_list) == 0 or len(anomaly_score_list) == 0:
+        print("No valid OOD samples were found after loading labels/masks.")
+        print("This usually means masks do not contain label '1' after dataset-specific remapping.")
+        file.write("    No valid OOD samples found after filtering/remapping labels.\n")
+        file.close()
+        return
+
+    file.write( "\n")
+
+    ood_gts = np.array(ood_gts_list)
+    anomaly_scores = np.array(anomaly_score_list)
+
+    ood_mask = (ood_gts == 1)
+    ind_mask = (ood_gts == 0)
+
+    ood_out = anomaly_scores[ood_mask]
+    ind_out = anomaly_scores[ind_mask]
+
+    ood_label = np.ones(len(ood_out))
+    ind_label = np.zeros(len(ind_out))
+    
+    val_out = np.concatenate((ind_out, ood_out))
+    val_label = np.concatenate((ind_label, ood_label))
+
+    prc_auc = average_precision_score(val_label, val_out)
+    fpr = fpr_at_95_tpr(val_out, val_label)
+
+    print(f'AUPRC score: {prc_auc*100.0}')
+    print(f'FPR@TPR95: {fpr*100.0}')
+
+    file.write(('    AUPRC score:' + str(prc_auc*100.0) + '   FPR@TPR95:' + str(fpr*100.0) ))
+    file.close()
+
+if __name__ == '__main__':
+    main()
