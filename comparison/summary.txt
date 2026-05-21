@@ -1,0 +1,34 @@
+Known-class Cityscapes-trainId set: 6,11,13,14,15,16,17,18
+COCO->Cityscapes mapping (coco_contig:cityscapes_trainId): {0: 11, 1: 18, 2: 13, 3: 17, 5: 15, 6: 16, 7: 14, 9: 6}
+
+Cityscapes-trained EoMT mean IoU (known classes): 0.8959
+COCO-trained EoMT mean IoU (known classes): 0.5425
+
+Per-class IoU (Cityscapes-trained):
+  6: 0.8316
+  11: 0.8205
+  13: 0.9770
+  14: 0.8649
+  15: 0.9736
+  16: 0.9590
+  17: 0.9436
+  18: 0.7965
+Per-class IoU (COCO-trained):
+  6: 0.6580
+  11: 0.7065
+  13: 0.8284
+  14: 0.1429
+  15: 0.7693
+  16: 0.3227
+  17: 0.2258
+  18: 0.6868
+
+
+6: Traffic Light
+11: Person
+13: Car
+14: Truck
+15: Bus
+16: Train
+17: Motorcycle
+18: Bicycle
