@@ -1,0 +1,17 @@
+Known Cityscapes trainIds (shared set): 6,11,13,14,15,16,17,18
+COCO->Cityscapes mapping (coco_contig:cityscapes_trainId): {0: 11, 1: 18, 2: 13, 3: 17, 5: 15, 6: 16, 7: 14, 9: 6}
+Eval thing trainIds: 11,13,14,15,16,17,18
+Eval stuff trainIds: 6
+Images evaluated: 20 (subset=val)
+
+Semantic mIoU (known classes)
+  cityscapes: 0.7676
+  coco: 0.4024
+
+Instance mAP (segm, known thing classes)
+  cityscapes: mAP=0.4177 | mAP@50=0.6029
+  coco: mAP=0.4299 | mAP@50=0.6623
+
+Panoptic PQ/SQ/RQ (known classes)
+  cityscapes: PQ=0.5326 | SQ=0.7802 | RQ=0.6366
+  coco: PQ=0.4797 | SQ=0.7977 | RQ=0.5877

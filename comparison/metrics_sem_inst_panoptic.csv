@@ -1,0 +1,3 @@
+model,semantic_miou_known,instance_map,instance_map50,panoptic_pq,panoptic_sq,panoptic_rq
+cityscapes,0.767576,0.417665,0.602910,0.532646,0.780166,0.636595
+coco,0.402406,0.429924,0.662264,0.479711,0.797669,0.587742
