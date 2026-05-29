@@ -1,0 +1,10 @@
+Config: c:\Users\Aein\Desktop\Polito\Semester 2\Fundamentals of Artificial Intelligence, Machine and Deep Learning\Project\MaskArchitectureAnomaly_CourseProject-main\eomt\configs\dinov2\cityscapes\semantic\eomt_base_640.yaml
+Evaluation Summary (RbA AUPRC/FPR@TPR95 in %)
+Dataset           | Images | RbA AUPRC | RbA FPR95
+------------------+--------+-----------+----------
+FS_LostFound_full | 99     | 0.2572    | 96.2906  
+RoadAnomaly       | 60     | 10.9719   | 92.3051  
+RoadAnomaly21     | 10     | 16.8283   | 94.6035  
+fs_static         | 20     | 2.2019    | 94.3866  
+ALL               | 189    | 5.0076    | 94.3186  
+

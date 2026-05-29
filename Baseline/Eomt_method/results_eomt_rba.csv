@@ -1,0 +1,6 @@
+Dataset,Images,RbA_AUPRC_percent,RbA_FPR95_percent
+FS_LostFound_full,99,0.2572,96.2906
+RoadAnomaly,60,10.9719,92.3051
+RoadAnomaly21,10,16.8283,94.6035
+fs_static,20,2.2019,94.3866
+ALL,189,5.0076,94.3186
